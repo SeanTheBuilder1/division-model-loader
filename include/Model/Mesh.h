@@ -8,37 +8,31 @@
 #include <memory>
 #include <string>
 
-
-
-
-
 #define MAX_BONE_INFLUENCE 4
-struct Vertex{
-	glm::vec3 position;
-	glm::vec3 normal;
-	glm::vec2 tex_coord;
-	glm::vec3 tangent;
-	glm::vec3 bitangent;
-
-	int bone_ids[MAX_BONE_INFLUENCE];
-	float weights[MAX_BONE_INFLUENCE];
+struct Vertex {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 tex_coord;
+    glm::vec3 tangent;
+    glm::vec3 bitangent;
+    //
+    int bone_ids[MAX_BONE_INFLUENCE];
+    float weights[MAX_BONE_INFLUENCE];
 };
 
-struct Texture{
-	unsigned int id{0};
-	std::string type;
-	std::string path;
+struct Texture {
+    unsigned int id{0};
+    std::string type;
+    std::string path;
 };
 
-class Mesh{
+class Mesh {
 public:
-	std::vector<Vertex> vertices;
-	std::vector<unsigned int> indices;
-	std::vector<Texture> textures;
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+    std::vector<Texture> textures;
 
-	unsigned int VAO{0};
-	unsigned int VBO{0};
-	unsigned int EBO{0};
+    unsigned int VAO{0};
+    unsigned int VBO{0};
+    unsigned int EBO{0};
 };
-
-
