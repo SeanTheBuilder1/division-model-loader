@@ -187,3 +187,145 @@ bool loadModel(const std::string& source, Model* result_model) {
     processNode(result_model, scene->mRootNode, scene);
     return true;
 }
+
+void loadModelTester(const std::string& source, Model* result_model) {
+    std::ifstream file(source, std::ios::binary);
+    int size{0};
+    file.read((char*)&size, sizeof(int));
+    if (!size) {
+        result_model->directory = ' ';
+        return;
+    }
+    std::unique_ptr<int[]> mesh_sizes(new int[size]);
+    file.read((char*)mesh_sizes.get(), (sizeof(int) * size));
+    result_model->meshes.reserve(size / 3);
+    for (int i = 0; i < size; i = i + 3) {
+        result_model->meshes.emplace_back(Mesh());
+        Mesh& mesh = result_model->meshes.back();
+
+        mesh.vertices.resize(mesh_sizes[i]);
+        file.read((char*)mesh.vertices.data(), sizeof(Vertex) * mesh_sizes[i]);
+        mesh.indices.resize(mesh_sizes[i + 1]);
+        file.read(
+            (char*)mesh.indices.data(), sizeof(unsigned int) * mesh_sizes[i + 1]
+        );
+
+        mesh.textures.reserve(mesh_sizes[i + 2]);
+        for (int j = 0; j < mesh_sizes[i + 2]; ++j) {
+            mesh.textures.emplace_back(Texture());
+            Texture& texture = mesh.textures.back();
+            // Texture texture;
+            file.read((char*)&texture.id, sizeof(int));
+            file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            file >> texture.type;
+            file >> texture.path;
+            file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            // mesh.textures.emplace_back(std::move(texture));
+        }
+        // model->meshes.emplace_back(std::move(mesh));
+    }
+    // result_model->source = source;
+    result_model->directory = source.substr(0, source.find_last_of('/'));
+    file.close();
+}
+
+bool compareSavedModel(Model* original_model, Model* test_model) {
+    if (original_model->meshes.size() != test_model->meshes.size()) {
+        printf(
+            "Model %s does not match mesh size from original\n%zu meshes vs. "
+            "%zu "
+            "meshes\n",
+            original_model->directory.c_str(), original_model->meshes.size(),
+            test_model->meshes.size()
+        );
+        return false;
+    }
+    bool success = true;
+    for (int i = 0; i < original_model->meshes.size(); ++i) {
+        if (original_model->meshes[i].vertices.size()
+            != test_model->meshes[i].vertices.size()) [[unlikely]] {
+            printf(
+                "Model %s does not match vertices size from original\n%zu "
+                "vertices "
+                "vs. %zu vertices\n",
+                original_model->directory.c_str(),
+                original_model->meshes[i].vertices.size(),
+                test_model->meshes[i].vertices.size()
+            );
+            return false;
+        }
+        for (int j = 0; j < original_model->meshes[i].vertices.size(); ++j) {
+            std::vector<Vertex> vertices1 = original_model->meshes[i].vertices;
+            std::vector<Vertex> vertices2 = test_model->meshes[i].vertices;
+            if (vertices1[j].position != vertices2[j].position) [[unlikely]] {
+                success = false;
+                printf(
+                    "position %f, %f, %f != %f, %f, %f\n",
+                    vertices1[j].position.x, vertices1[j].position.y,
+                    vertices1[j].position.z, vertices2[j].position.x,
+                    vertices2[j].position.y, vertices2[j].position.z
+                );
+            }
+            if (vertices1[j].normal != vertices2[j].normal) [[unlikely]] {
+                success = false;
+                printf(
+                    "normal: %f, %f, %f != %f, %f, %f\n", vertices1[j].normal.x,
+                    vertices1[j].normal.y, vertices1[j].normal.z,
+                    vertices2[j].normal.x, vertices2[j].normal.y,
+                    vertices2[j].normal.z
+                );
+            }
+
+            if (vertices1[j].tex_coord != vertices2[j].tex_coord) [[unlikely]] {
+                success = false;
+                printf(
+                    "tex_coord: %f, %f != %f, %f\n", vertices1[j].tex_coord.x,
+                    vertices1[j].tex_coord.y, vertices2[j].tex_coord.x,
+                    vertices2[j].tex_coord.y
+                );
+            }
+
+            if (vertices1[j].tangent != vertices2[j].tangent) [[unlikely]] {
+                success = false;
+                printf(
+                    "tangent: %f, %f, %f != %f, %f, %f\n",
+                    vertices1[j].tangent.x, vertices1[j].tangent.y,
+                    vertices1[j].tangent.z, vertices2[j].tangent.x,
+                    vertices2[j].tangent.y, vertices2[j].tangent.z
+                );
+            }
+            if (vertices1[j].bitangent != vertices2[j].bitangent) [[unlikely]] {
+                success = false;
+                printf(
+                    "bitangent: %f, %f, %f != %f, %f, %f\n",
+                    vertices1[j].bitangent.x, vertices1[j].bitangent.y,
+                    vertices1[j].bitangent.z, vertices2[j].bitangent.x,
+                    vertices2[j].bitangent.y, vertices2[j].bitangent.z
+                );
+            }
+        }
+        if (original_model->meshes[i].indices.size()
+            != test_model->meshes[i].indices.size()) [[unlikely]] {
+            printf(
+                "Model %s does not match indices size from original\n%zu "
+                "indices "
+                "vs. %zu indices\n",
+                original_model->directory.c_str(),
+                original_model->meshes[i].indices.size(),
+                test_model->meshes[i].indices.size()
+            );
+            return false;
+        }
+        for (int j = 0; j < original_model->meshes[i].indices.size(); ++j) {
+            if (original_model->meshes[i].indices[j]
+                != test_model->meshes[i].indices[j]) {
+                printf(
+                    "indices: %d != %d", original_model->meshes[i].indices[j],
+                    test_model->meshes[i].indices[j]
+                );
+                success = false;
+            }
+        }
+    }
+    return success;
+}

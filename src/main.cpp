@@ -9,10 +9,12 @@ int main(int argc, char** argv) {
         return 1;
     }
     Model* model_ptr = new Model();
+    Model* test_model_ptr = new Model();
     if (!loadModel(argv[1], model_ptr))
         return 1;
     if (argc > 2) {
         saveModel(argv[2], model_ptr);
+        loadModelTester(argv[2], test_model_ptr);
         printf("Saved %s at %s\n", argv[1], argv[2]);
     }
     else {
@@ -23,7 +25,12 @@ int main(int argc, char** argv) {
             destination.resize(destination.size() - diff);
         }
         saveModel(destination + ".dat", model_ptr);
+        loadModelTester(destination + ".dat", test_model_ptr);
         printf("Saved %s at %s\n", argv[1], (destination + ".dat").c_str());
+    }
+    bool success = compareSavedModel(model_ptr, test_model_ptr);
+    if (success) {
+        printf("Test passed\n");
     }
     return 0;
 }
