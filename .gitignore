@@ -1,0 +1,16 @@
+.cache/clangd/index
+CMakeFiles
+bin/dist
+bin/model-loader
+bin/main
+bin/cone.obj
+bin/cone.mtl
+bin/cone.dat
+include/ASSIMP/CMakeFiles/Export/276191b64e4aaa7fa3bf193da4658da2
+include/ASSIMP/bin
+.ninja_deps
+.ninja_log
+CMakeCache.txt
+build.ninja
+cmake_install.cmake
+compile_commands.json
