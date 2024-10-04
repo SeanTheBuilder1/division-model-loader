@@ -1,8 +1,43 @@
 #include "model_loader.h"
+#include <filesystem>
+
+std::string
+getRelativePath(const std::string& directory, const std::string& path) {
+    std::error_code ec;
+    std::filesystem::path directory_path(
+        directory + '/', std::filesystem::path::format::generic_format
+    );
+    std::filesystem::path real_path(
+        directory_path.string() + path,
+        std::filesystem::path::format::generic_format
+    );
+    std::filesystem::path absolute_real_path =
+        std::filesystem::absolute(real_path, ec);
+    if (!ec && std::filesystem::exists(absolute_real_path)
+        && (real_path == absolute_real_path)) {
+        auto ret =
+            std::filesystem::relative(absolute_real_path, directory_path, ec);
+        if (!ec)
+            return ret;
+    }
+
+    real_path = std::filesystem::path(
+        path, std::filesystem::path::format::generic_format
+    );
+    absolute_real_path = std::filesystem::absolute(real_path, ec);
+    if (!ec && std::filesystem::exists(absolute_real_path)
+        && (real_path == absolute_real_path)) {
+        auto ret =
+            std::filesystem::relative(absolute_real_path, directory_path, ec);
+        if (!ec)
+            return ret;
+    }
+    return real_path;
+}
 
 std::vector<Texture> loadMaterialTextures(
     aiMaterial* mat, aiTextureType type, std::string typeName,
-    std::vector<Texture>& textures_loaded
+    std::vector<Texture>& textures_loaded, const std::string& directory
 ) {
     std::vector<Texture> textures;
     for (unsigned int i = 0; i < mat->GetTextureCount(type); i++) {
@@ -11,8 +46,9 @@ std::vector<Texture> loadMaterialTextures(
         // check if texture was loaded before and if so, continue to next
         // iteration: skip loading a new texture
         bool skip = false;
+        std::string real_path = getRelativePath(directory, str.C_Str());
         for (unsigned int j = 0; j < textures_loaded.size(); j++) {
-            if (std::strcmp(textures_loaded[j].path.data(), str.C_Str()) == 0) {
+            if (textures_loaded[j].path == real_path) {
                 textures.push_back(textures_loaded[j]);
                 skip =
                     true; // a texture with the same filepath has already been
@@ -23,7 +59,7 @@ std::vector<Texture> loadMaterialTextures(
         if (!skip) { // if texture hasn't been loaded already, load it
             Texture texture;
             texture.type = typeName;
-            texture.path = str.C_Str();
+            texture.path = real_path;
             textures.push_back(texture);
             textures_loaded.push_back(texture
             ); // store it as texture loaded for entire model, to ensure we
@@ -33,7 +69,9 @@ std::vector<Texture> loadMaterialTextures(
     return textures;
 }
 
-Mesh processMesh(aiMesh* mesh, const aiScene* scene) {
+Mesh processMesh(
+    aiMesh* mesh, const aiScene* scene, const std::string& directory
+) {
     // data to fill
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -106,22 +144,26 @@ Mesh processMesh(aiMesh* mesh, const aiScene* scene) {
 
     // 1. diffuse maps
     std::vector<Texture> diffuseMaps = loadMaterialTextures(
-        material, aiTextureType_DIFFUSE, "texture_diffuse", textures_loaded
+        material, aiTextureType_DIFFUSE, "texture_diffuse", textures_loaded,
+        directory
     );
     textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
     // 2. specular maps
     std::vector<Texture> specularMaps = loadMaterialTextures(
-        material, aiTextureType_SPECULAR, "texture_specular", textures_loaded
+        material, aiTextureType_SPECULAR, "texture_specular", textures_loaded,
+        directory
     );
     textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
     // 3. normal maps
     std::vector<Texture> normalMaps = loadMaterialTextures(
-        material, aiTextureType_HEIGHT, "texture_normal", textures_loaded
+        material, aiTextureType_HEIGHT, "texture_normal", textures_loaded,
+        directory
     );
     textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
     // 4. height maps
     std::vector<Texture> heightMaps = loadMaterialTextures(
-        material, aiTextureType_SHININESS, "texture_reflection", textures_loaded
+        material, aiTextureType_SHININESS, "texture_reflection",
+        textures_loaded, directory
     );
     textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
 
@@ -129,15 +171,18 @@ Mesh processMesh(aiMesh* mesh, const aiScene* scene) {
     return Mesh(vertices, indices, textures);
 }
 
-void processNode(Model* model, aiNode* node, const aiScene* scene) {
+void processNode(
+    Model* model, aiNode* node, const aiScene* scene,
+    const std::string& directory
+) {
     // process all the node's meshes (if any)
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-        model->meshes.push_back(processMesh(mesh, scene));
+        model->meshes.push_back(processMesh(mesh, scene, directory));
     }
     // then do the same for each of its children
     for (unsigned int i = 0; i < node->mNumChildren; i++) {
-        processNode(model, node->mChildren[i], scene);
+        processNode(model, node->mChildren[i], scene, directory);
     }
 }
 
@@ -183,8 +228,16 @@ bool loadModel(const std::string& source, Model* result_model) {
         return false;
     }
     result_model->directory = source.substr(0, source.find_last_of('/'));
-
-    processNode(result_model, scene->mRootNode, scene);
+    std::filesystem::path directory(
+        result_model->directory, std::filesystem::path::format::generic_format
+    );
+    std::error_code ec; // ignore error
+    directory = std::filesystem::absolute(directory, ec);
+    result_model->directory = directory;
+    result_model->directory = result_model->directory.substr(
+        0, result_model->directory.find_last_of('/')
+    );
+    processNode(result_model, scene->mRootNode, scene, result_model->directory);
     return true;
 }
 

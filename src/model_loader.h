@@ -11,8 +11,13 @@
 #include "Model/Model.h"
 
 bool loadModel(const std::string& source, Model* result_model);
-void processNode(Model* model, aiNode* node, const aiScene* scene);
-Mesh processMesh(aiMesh* mesh, const aiScene* scene);
+void processNode(
+    Model* model, aiNode* node, const aiScene* scene,
+    const std::string& directory
+);
+Mesh processMesh(
+    aiMesh* mesh, const aiScene* scene, const std::string& directory
+);
 std::vector<Texture> loadMaterialTextures(
     aiMaterial* mat, aiTextureType type, std::string typeName,
     std::vector<Texture>& textures_loaded
