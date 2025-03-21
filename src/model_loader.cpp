@@ -1,5 +1,8 @@
 #include "model_loader.h"
 #include <filesystem>
+#include <span>
+#include <cinttypes>
+
 inline glm::mat4 aiMat4ToMat4(const aiMatrix4x4& matrix) {
     glm::mat4 result;
     result[0][0] = matrix.a1;
@@ -90,7 +93,8 @@ std::vector<Texture> loadMaterialTextures(
 }
 
 Mesh processMesh(
-    aiMesh* mesh, const aiScene* scene, const std::string& directory
+    aiMesh* mesh, const aiScene* scene, const std::string& directory,
+    Model& model
 ) {
     // data to fill
     std::vector<Vertex> vertices;
@@ -145,6 +149,45 @@ Mesh processMesh(
         }
         vertices.push_back(vertex);
     }
+    size_t bone_size = model.bone_to_index_map.size();
+    for (int i = 0; i < mesh->mNumBones; ++i) {
+        uint32_t bone_id;
+        std::string bone_name = mesh->mBones[i]->mName.C_Str();
+        if (!model.bone_to_index_map.contains(bone_name)) {
+            model.bone_to_index_map.emplace(bone_name, bone_size);
+            model.skeleton.bone_data.emplace_back(BoneData{
+                .bone_offset_transform =
+                    aiMat4ToMat4(mesh->mBones[i]->mOffsetMatrix)
+            });
+            bone_size = model.bone_to_index_map.size();
+        }
+        else {
+            bone_id = model.bone_to_index_map[bone_name];
+        }
+        auto weight_span =
+            std::span{mesh->mBones[i]->mWeights, mesh->mBones[i]->mNumWeights};
+        for (auto& j : weight_span) {
+            if (j.mVertexId >= vertices.size()) {
+                std::cerr << "WARN: Bone Vertex ID "
+                                 + std::to_string(j.mVertexId)
+                                 + " is out of bounds of vertex array(size: "
+                                 + std::to_string(vertices.size())
+                                 + "), not adding vertex\n";
+                continue;
+            }
+            for (int k = 0; k < MAX_BONE_INFLUENCE; ++k) {
+                if (vertices[j.mVertexId].weights[i] == 0.0f) {
+                    vertices[j.mVertexId].weights[i] = j.mWeight;
+                    vertices[j.mVertexId].bone_ids[i] = bone_id;
+                    break;
+                }
+                if (k == MAX_BONE_INFLUENCE - 1) {
+                    std::cerr
+                        << "WARN: Max bones reached for vertex, not adding\n";
+                }
+            }
+        }
+    }
     // now wak through each of the mesh's faces (a face is a mesh its triangle)
     // and retrieve the corresponding vertex indices.
     for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
@@ -153,6 +196,7 @@ Mesh processMesh(
         for (unsigned int j = 0; j < face.mNumIndices; j++)
             indices.push_back(face.mIndices[j]);
     }
+
     // process materials
     aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
     // we assume a convention for sampler names in the shaders. Each diffuse
@@ -198,11 +242,51 @@ void processNode(
     // process all the node's meshes (if any)
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-        model->meshes.push_back(processMesh(mesh, scene, directory));
+        model->meshes.push_back(processMesh(mesh, scene, directory, *model));
     }
     // then do the same for each of its children
     for (unsigned int i = 0; i < node->mNumChildren; i++) {
         processNode(model, node->mChildren[i], scene, directory);
+    }
+}
+
+void processAnimationNode(
+    Model* model, aiNode* node, const aiScene* scene,
+    const uint32_t& parent_index = -1,
+    const glm::mat4& parent_transform = glm::mat4(1.0f)
+) {
+    std::unordered_map<std::string, uint32_t> hierarchy_cache;
+    const aiAnimation* animation = scene->mAnimations[0];
+    std::string node_name = node->mName.C_Str();
+    glm::mat4 node_transform = aiMat4ToMat4(node->mTransformation);
+    int current_index = parent_index;
+    glm::mat4 global_transform = parent_transform * node_transform;
+    if (model->bone_to_index_map.contains(node_name)) {
+        uint32_t bone_data_index = model->bone_to_index_map[node_name];
+        model->skeleton.bone_graph.emplace_back(BoneNode{
+            .parent_index = static_cast<uint32_t>(parent_index),
+            .bone_data_index = bone_data_index,
+            .bone_node_transform = global_transform
+        });
+        current_index = model->skeleton.bone_graph.size() - 1;
+        hierarchy_cache.emplace(node_name, current_index);
+        if (parent_index != -1) {
+            model->skeleton.bone_graph[parent_index]
+                .children_index.emplace_back(current_index);
+        }
+        for (unsigned int i = 0; i < node->mNumChildren; i++) {
+            processAnimationNode(
+                model, node->mChildren[i], scene, current_index
+            );
+        }
+    }
+    else {
+
+        for (unsigned int i = 0; i < node->mNumChildren; i++) {
+            processAnimationNode(
+                model, node->mChildren[i], scene, parent_index, global_transform
+            );
+        }
     }
 }
 
@@ -233,6 +317,49 @@ void saveModel(const std::string& destination, Model* src_model) {
             file << '/' << texture.path << '\n';
         }
     }
+    for (auto [bone_name, bone_index] : src_model->bone_to_index_map) {
+        file.write(reinterpret_cast<char*>(&bone_index), sizeof(uint32_t));
+        file << bone_name << '\n';
+    }
+    uint32_t map_delimiter = -1;
+    file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
+    file.write(
+        reinterpret_cast<char*>(&src_model->global_inverse_transform),
+        sizeof(glm::mat4)
+    );
+    uint32_t skeleton_vector_size = src_model->skeleton.bone_graph.size();
+    if (src_model->skeleton.bone_data.size() != skeleton_vector_size) {
+        // Should be error but fuck it we ball
+        skeleton_vector_size = std::min(
+            skeleton_vector_size,
+            static_cast<uint32_t>(src_model->skeleton.bone_data.size())
+        );
+    }
+    file.write(
+        reinterpret_cast<char*>(&skeleton_vector_size), sizeof(uint32_t)
+    );
+    for (uint32_t i = 0; i < skeleton_vector_size; ++i) {
+        file.write(
+            reinterpret_cast<char*>(&src_model->skeleton.bone_graph[i]),
+            sizeof(BoneNode) - offsetof(BoneNode, children_index)
+        );
+        file.write(
+            reinterpret_cast<char*>(
+                src_model->skeleton.bone_graph[i].children_index.data()
+            ),
+            sizeof(uint32_t)
+                * src_model->skeleton.bone_graph[i].children_index.size()
+        );
+        file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
+    }
+    file.write(
+        reinterpret_cast<char*>(src_model->skeleton.bone_graph.data()),
+        sizeof(BoneNode) * skeleton_vector_size
+    );
+    file.write(
+        reinterpret_cast<char*>(src_model->skeleton.bone_data.data()),
+        sizeof(BoneData) * skeleton_vector_size
+    );
     delete[] mesh_sizes;
     file.close();
 }
@@ -258,6 +385,12 @@ bool loadModel(const std::string& source, Model* result_model) {
         0, result_model->directory.find_last_of('/')
     );
     processNode(result_model, scene->mRootNode, scene, result_model->directory);
+    result_model->skeleton.bone_data.resize(
+        result_model->bone_to_index_map.size()
+    );
+    result_model->global_inverse_transform =
+        glm::inverse(aiMat4ToMat4(scene->mRootNode->mTransformation));
+    processAnimationNode(result_model, scene->mRootNode, scene);
     return true;
 }
 
@@ -297,6 +430,49 @@ void loadModelTester(const std::string& source, Model* result_model) {
         }
         // model->meshes.emplace_back(std::move(mesh));
     }
+    while (true) {
+        std::string key;
+        uint32_t value;
+        file.read(reinterpret_cast<char*>(&value), sizeof(uint32_t));
+        if (value == -1) {
+            break;
+        }
+        file >> key;
+        file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        result_model->bone_to_index_map.emplace(std::move(key), value);
+    }
+    file.read(
+        reinterpret_cast<char*>(&result_model->global_inverse_transform),
+        sizeof(glm::mat4)
+    );
+    uint32_t skeleton_vector_size = 0;
+    file.read(reinterpret_cast<char*>(&skeleton_vector_size), sizeof(uint32_t));
+    result_model->skeleton.bone_graph.resize(skeleton_vector_size);
+    for (uint32_t i = 0; i < skeleton_vector_size; ++i) {
+        file.read(
+            reinterpret_cast<char*>(&result_model->skeleton.bone_graph[i]),
+            sizeof(BoneNode) - offsetof(BoneNode, children_index)
+        );
+        while (true) {
+            uint32_t child_index = -1;
+            file.read(reinterpret_cast<char*>(&child_index), sizeof(uint32_t));
+            if (child_index == -1) {
+                break;
+            }
+            result_model->skeleton.bone_graph[i].children_index.emplace_back(
+                child_index
+            );
+        }
+    }
+    file.read(
+        reinterpret_cast<char*>(result_model->skeleton.bone_graph.data()),
+        sizeof(BoneNode) * skeleton_vector_size
+    );
+    result_model->skeleton.bone_data.resize(skeleton_vector_size);
+    file.read(
+        reinterpret_cast<char*>(result_model->skeleton.bone_data.data()),
+        sizeof(BoneData) * skeleton_vector_size
+    );
     result_model->source = source;
     result_model->directory = source.substr(0, source.find_last_of('/'));
     file.close();
@@ -398,6 +574,38 @@ bool compareSavedModel(Model* original_model, Model* test_model) {
                 );
                 success = false;
             }
+        }
+    }
+    if (original_model->bone_to_index_map.size()
+        != test_model->bone_to_index_map.size()) {
+        printf(
+            "Model %s does not match bone map size from original\n%zu bones "
+            "vs. "
+            "%zu "
+            "bones\n",
+            original_model->directory.c_str(),
+            original_model->bone_to_index_map.size(),
+            test_model->bone_to_index_map.size()
+        );
+        return false;
+    }
+    for (auto [key, value] : original_model->bone_to_index_map) {
+        if (!test_model->bone_to_index_map.contains(key)) {
+            printf(
+                "Model %s does not have value for key %s in bone map\nValue of "
+                "%s in original model is %" PRIu32 "\n",
+                original_model->directory.c_str(), key.c_str(), key.c_str(),
+                value
+            );
+            success = false;
+        }
+        uint32_t test_value = test_model->bone_to_index_map[key];
+        if (value != test_value) {
+            printf(
+                "Bone \"%s\": %" PRIu32 " != %" PRIu32 "\n", key.c_str(), value,
+                test_value
+            );
+            success = false;
         }
     }
     return success;

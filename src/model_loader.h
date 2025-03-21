@@ -16,7 +16,8 @@ void processNode(
     const std::string& directory
 );
 Mesh processMesh(
-    aiMesh* mesh, const aiScene* scene, const std::string& directory
+    aiMesh* mesh, const aiScene* scene, const std::string& directory,
+    Model& model
 );
 std::vector<Texture> loadMaterialTextures(
     aiMaterial* mat, aiTextureType type, std::string typeName,
