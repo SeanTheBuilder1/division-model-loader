@@ -8,17 +8,12 @@
 
 
 
-class Model{
+class Model {
 public:
-	std::vector<Mesh> meshes;
-	std::string directory;
+    std::vector<Mesh> meshes;
     std::string source;
+    std::string directory;
+
 };
 
-
-
-
-
-//Model getExampleModel();
-
-
+// Model getExampleModel();
