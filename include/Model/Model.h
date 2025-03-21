@@ -12,6 +12,7 @@ class Model{
 public:
 	std::vector<Mesh> meshes;
 	std::string directory;
+    std::string source;
 };
 
 

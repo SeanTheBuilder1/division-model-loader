@@ -277,7 +277,7 @@ void loadModelTester(const std::string& source, Model* result_model) {
         }
         // model->meshes.emplace_back(std::move(mesh));
     }
-    // result_model->source = source;
+    result_model->source = source;
     result_model->directory = source.substr(0, source.find_last_of('/'));
     file.close();
 }
