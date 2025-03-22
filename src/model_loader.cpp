@@ -41,7 +41,7 @@ getRelativePath(const std::string& directory, const std::string& path) {
         auto ret =
             std::filesystem::relative(absolute_real_path, directory_path, ec);
         if (!ec)
-            return ret;
+            return ret.string();
     }
 
     real_path = std::filesystem::path(
@@ -53,9 +53,9 @@ getRelativePath(const std::string& directory, const std::string& path) {
         auto ret =
             std::filesystem::relative(absolute_real_path, directory_path, ec);
         if (!ec)
-            return ret;
+            return ret.string();
     }
-    return real_path;
+    return real_path.string();
 }
 
 std::vector<Texture> loadMaterialTextures(
@@ -380,7 +380,7 @@ bool loadModel(const std::string& source, Model* result_model) {
     );
     std::error_code ec; // ignore error
     directory = std::filesystem::absolute(directory, ec);
-    result_model->directory = directory;
+    result_model->directory = directory.string();
     result_model->directory = result_model->directory.substr(
         0, result_model->directory.find_last_of('/')
     );
