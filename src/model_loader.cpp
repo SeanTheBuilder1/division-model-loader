@@ -155,6 +155,7 @@ Mesh processMesh(
         std::string bone_name = mesh->mBones[i]->mName.C_Str();
         if (!model.bone_to_index_map.contains(bone_name)) {
             model.bone_to_index_map.emplace(bone_name, bone_size);
+            bone_id = bone_size;
             model.skeleton.bone_data.emplace_back(BoneData{
                 .bone_offset_transform =
                     aiMat4ToMat4(mesh->mBones[i]->mOffsetMatrix)
@@ -176,9 +177,9 @@ Mesh processMesh(
                 continue;
             }
             for (int k = 0; k < MAX_BONE_INFLUENCE; ++k) {
-                if (vertices[j.mVertexId].weights[i] == 0.0f) {
-                    vertices[j.mVertexId].weights[i] = j.mWeight;
-                    vertices[j.mVertexId].bone_ids[i] = bone_id;
+                if (vertices[j.mVertexId].weights[k] == 0.0f) {
+                    vertices[j.mVertexId].weights[k] = j.mWeight;
+                    vertices[j.mVertexId].bone_ids[k] = bone_id;
                     break;
                 }
                 if (k == MAX_BONE_INFLUENCE - 1) {
