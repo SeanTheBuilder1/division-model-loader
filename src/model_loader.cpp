@@ -294,7 +294,7 @@ void processAnimationNode(
 void saveModel(const std::string& destination, Model* src_model) {
     std::fstream file(destination, std::ios::out | std::ios::binary);
     int size = src_model->meshes.size() * 3;
-    int* mesh_sizes = new int[size];
+    std::unique_ptr<int[]> mesh_sizes = std::make_unique<int[]>(size);
     file.write((char*)&size, sizeof(int));
     for (int i = 0; i < size; i = i + 3) {
         mesh_sizes[i] = src_model->meshes[i / 3].vertices.size();
@@ -361,7 +361,6 @@ void saveModel(const std::string& destination, Model* src_model) {
         reinterpret_cast<char*>(src_model->skeleton.bone_data.data()),
         sizeof(BoneData) * skeleton_vector_size
     );
-    delete[] mesh_sizes;
     file.close();
 }
 
@@ -403,7 +402,7 @@ void loadModelTester(const std::string& source, Model* result_model) {
         result_model->directory = ' ';
         return;
     }
-    std::unique_ptr<int[]> mesh_sizes(new int[size]);
+    std::unique_ptr<int[]> mesh_sizes = std::make_unique<int[]>(size);
     file.read((char*)mesh_sizes.get(), (sizeof(int) * size));
     result_model->meshes.reserve(size / 3);
     for (int i = 0; i < size; i = i + 3) {
