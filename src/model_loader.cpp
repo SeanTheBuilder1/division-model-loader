@@ -293,6 +293,11 @@ void processAnimationNode(
 
 void saveModel(const std::string& destination, Model* src_model) {
     std::fstream file(destination, std::ios::out | std::ios::binary);
+    ModelFileHeader header;
+    // Version 1: Initial Version, only meshes
+    // Version 2: Add 64 byte header, add skeleton support
+    header.version = 2;
+    file.write(reinterpret_cast<char*>(&header), sizeof(ModelFileHeader));
     int size = src_model->meshes.size() * 3;
     std::unique_ptr<int[]> mesh_sizes = std::make_unique<int[]>(size);
     file.write((char*)&size, sizeof(int));
@@ -324,17 +329,20 @@ void saveModel(const std::string& destination, Model* src_model) {
     }
     uint32_t map_delimiter = -1;
     file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
+    if (src_model->bone_to_index_map.empty()) {
+        file.close();
+        return;
+    }
     file.write(
         reinterpret_cast<char*>(&src_model->global_inverse_transform),
         sizeof(glm::mat4)
     );
     uint32_t skeleton_vector_size = src_model->skeleton.bone_graph.size();
     if (src_model->skeleton.bone_data.size() != skeleton_vector_size) {
-        // Should be error but fuck it we ball
-        skeleton_vector_size = std::min(
-            skeleton_vector_size,
-            static_cast<uint32_t>(src_model->skeleton.bone_data.size())
-        );
+        std::cerr
+            << "ERROR: Bone Graph Size and Bone Data Size is mismatched\n";
+        file.close();
+        return;
     }
     file.write(
         reinterpret_cast<char*>(&skeleton_vector_size), sizeof(uint32_t)
@@ -398,6 +406,10 @@ void loadModelTester(const std::string& source, Model* result_model) {
     std::ifstream file(source, std::ios::binary);
     result_model->source = source;
     result_model->directory = source.substr(0, source.find_last_of('/'));
+    ModelFileHeader header;
+    // Version 1: Initial Version, only meshes
+    // Version 2: Add 64 byte header, add skeleton support
+    file.read(reinterpret_cast<char*>(&header), sizeof(ModelFileHeader));
     int size{0};
     file.read((char*)&size, sizeof(int));
     if (!size) {
@@ -428,20 +440,27 @@ void loadModelTester(const std::string& source, Model* result_model) {
             file >> texture.type;
             file >> texture.path;
             file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            // mesh.textures.emplace_back(std::move(texture));
         }
-        // model->meshes.emplace_back(std::move(mesh));
     }
     while (true) {
+        if (!file.good() || file.eof()) {
+            std::cerr << "ERROR: Reading skeleton map failed\n";
+            break;
+        }
         std::string key;
         uint32_t value;
         file.read(reinterpret_cast<char*>(&value), sizeof(uint32_t));
-        if (value == -1) {
-            break;
+        if (value == static_cast<uint32_t>(-1)) {
+            file.close();
+            return;
         }
         file >> key;
         file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         result_model->bone_to_index_map.emplace(std::move(key), value);
+    }
+    if (!file.good() || file.eof()) {
+        file.close();
+        return;
     }
     file.read(
         reinterpret_cast<char*>(&result_model->global_inverse_transform),

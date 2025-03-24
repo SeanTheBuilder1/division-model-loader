@@ -7,6 +7,11 @@
 #include <Model/Animation.h>
 #include <string>
 
+struct ModelFileHeader {
+    uint32_t version;
+    char vacant[60] = {};
+};
+
 class Model {
 public:
     std::vector<Mesh> meshes;
