@@ -396,6 +396,8 @@ bool loadModel(const std::string& source, Model* result_model) {
 
 void loadModelTester(const std::string& source, Model* result_model) {
     std::ifstream file(source, std::ios::binary);
+    result_model->source = source;
+    result_model->directory = source.substr(0, source.find_last_of('/'));
     int size{0};
     file.read((char*)&size, sizeof(int));
     if (!size) {
@@ -473,8 +475,6 @@ void loadModelTester(const std::string& source, Model* result_model) {
         reinterpret_cast<char*>(result_model->skeleton.bone_data.data()),
         sizeof(BoneData) * skeleton_vector_size
     );
-    result_model->source = source;
-    result_model->directory = source.substr(0, source.find_last_of('/'));
     file.close();
 }
 
