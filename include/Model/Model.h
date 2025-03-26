@@ -18,10 +18,13 @@ public:
     std::string source;
     std::string directory;
 
-    std::unordered_map<std::string, uint32_t> bone_to_index_map;
+    std::unordered_map<std::string, BoneIndex> bone_to_index_map;
     std::vector<Animation> registered_animations;
     glm::mat4 global_inverse_transform = glm::mat4(1.0f);
     Skeleton skeleton;
 };
+
+void saveModel(const std::string& destination, Model* src_model);
+void loadModelTester(const std::string& source, Model* result_model);
 
 // Model getExampleModel();

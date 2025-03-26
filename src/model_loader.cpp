@@ -146,7 +146,7 @@ Mesh processMesh(
             bone_size = model.bone_to_index_map.size();
         }
         else {
-            bone_id = model.bone_to_index_map[bone_name];
+            bone_id = model.bone_to_index_map[bone_name].data_index;
         }
         auto weight_span =
             std::span{mesh->mBones[i]->mWeights, mesh->mBones[i]->mNumWeights};
@@ -239,124 +239,104 @@ void processAnimationNode(
     const uint32_t& parent_index = -1,
     const glm::mat4& parent_transform = glm::mat4(1.0f)
 ) {
-    std::unordered_map<std::string, uint32_t> hierarchy_cache;
-    const aiAnimation* animation = scene->mAnimations[0];
     std::string node_name = node->mName.C_Str();
-    glm::mat4 node_transform = aiMat4ToMat4(node->mTransformation);
-    int current_index = parent_index;
+    const glm::mat4 node_transform = aiMat4ToMat4(node->mTransformation);
+    uint32_t current_index = parent_index;
     glm::mat4 global_transform = parent_transform * node_transform;
     if (model->bone_to_index_map.contains(node_name)) {
-        uint32_t bone_data_index = model->bone_to_index_map[node_name];
+        uint32_t bone_data_index =
+            model->bone_to_index_map[node_name].data_index;
         model->skeleton.bone_graph.emplace_back(BoneNode{
-            .parent_index = static_cast<uint32_t>(parent_index),
+            .parent_index = parent_index,
             .bone_data_index = bone_data_index,
-            .bone_node_transform = global_transform
+            .bone_node_transform = node_transform,
+            .children_index = {}
         });
         current_index = model->skeleton.bone_graph.size() - 1;
-        hierarchy_cache.emplace(node_name, current_index);
         if (parent_index != -1) {
             model->skeleton.bone_graph[parent_index]
                 .children_index.emplace_back(current_index);
         }
-        for (unsigned int i = 0; i < node->mNumChildren; i++) {
-            processAnimationNode(
-                model, node->mChildren[i], scene, current_index
-            );
-        }
     }
     else {
-
-        for (unsigned int i = 0; i < node->mNumChildren; i++) {
-            processAnimationNode(
-                model, node->mChildren[i], scene, parent_index, global_transform
-            );
+        model->skeleton.bone_graph.emplace_back(BoneNode{
+            .parent_index = parent_index,
+            .bone_data_index = static_cast<uint32_t>(-1),
+            .bone_node_transform = node_transform,
+            .children_index = {}
+        });
+        current_index = model->skeleton.bone_graph.size() - 1;
+        model->bone_to_index_map.emplace(
+            node_name,
+            BoneIndex{
+                .data_index = static_cast<uint32_t>(-1),
+                .graph_index = current_index
+            }
+        );
+        if (parent_index != -1) {
+            model->skeleton.bone_graph[parent_index]
+                .children_index.emplace_back(current_index);
         }
+    }
+    for (unsigned int i = 0; i < node->mNumChildren; i++) {
+        processAnimationNode(
+            model, node->mChildren[i], scene, current_index, global_transform
+        );
     }
 }
 
-void saveModel(const std::string& destination, Model* src_model) {
-    std::fstream file(destination, std::ios::out | std::ios::binary);
-    ModelFileHeader header;
-    // Version 1: Initial Version, only meshes
-    // Version 2: Add 64 byte header, add skeleton support
-    header.version = 2;
-    file.write(reinterpret_cast<char*>(&header), sizeof(ModelFileHeader));
-    int size = src_model->meshes.size() * 3;
-    std::unique_ptr<int[]> mesh_sizes = std::make_unique<int[]>(size);
-    file.write((char*)&size, sizeof(int));
-    for (int i = 0; i < size; i = i + 3) {
-        mesh_sizes[i] = src_model->meshes[i / 3].vertices.size();
-        mesh_sizes[i + 1] = src_model->meshes[i / 3].indices.size();
-        mesh_sizes[i + 2] = src_model->meshes[i / 3].textures.size();
-    }
-    file.write((char*)&mesh_sizes[0], sizeof(int) * size);
-    for (int i = 0; i < size; i = i + 3) {
-        file.write(
-            (char*)&src_model->meshes[i / 3].vertices[0],
-            sizeof(Vertex) * mesh_sizes[i]
+
+void processAnimations(Model* model, const aiScene* scene) {
+    std::span<aiAnimation*> animations_span(
+        scene->mAnimations, scene->mNumAnimations
+    );
+    for (auto& animation : animations_span) {
+        Animation& current_animation =
+            model->registered_animations.emplace_back();
+        current_animation.name = animation->mName.C_Str();
+        std::span<aiNodeAnim*> channel_span(
+            animation->mChannels, animation->mNumChannels
         );
-        file.write(
-            (char*)&src_model->meshes[i / 3].indices[0],
-            sizeof(unsigned int) * mesh_sizes[i + 1]
-        );
-        for (int j = 0; j < mesh_sizes[i + 2]; ++j) {
-            Texture& texture = src_model->meshes[i / 3].textures[j];
-            file.write((char*)&texture.id, sizeof(int));
-            file << '\n' << texture.type << '\n';
-            file << '/' << texture.path << '\n';
+        for (auto& channel : channel_span) {
+            std::string bone_to_find = channel->mNodeName.C_Str();
+            if (!model->bone_to_index_map.contains(bone_to_find)) {
+                std::cerr << "WARN: Bone \"" << bone_to_find
+                          << "\" not found in bone map, ignoring channel\n";
+                continue;
+            }
+            AnimationChannel& current_channel =
+                current_animation.channels.emplace_back();
+            current_channel.bone_index = model->bone_to_index_map[bone_to_find];
+            std::span<aiVectorKey> pos_key_span(
+                channel->mPositionKeys, channel->mNumPositionKeys
+            );
+            for (auto& position : pos_key_span) {
+                current_channel.position.emplace_back(
+                    aiVectorKeyToKeyframe(position)
+                );
+            }
+            std::span<aiQuatKey> rotation_key_span(
+                channel->mRotationKeys, channel->mNumRotationKeys
+            );
+            for (auto& rotation : rotation_key_span) {
+                current_channel.rotation.emplace_back(
+                    aiQuatKeyToKeyframe(rotation)
+                );
+            }
+            std::span<aiVectorKey> scaling_key_span(
+                channel->mScalingKeys, channel->mNumScalingKeys
+            );
+            for (auto& scaling : scaling_key_span) {
+                current_channel.scale.emplace_back(aiVectorKeyToKeyframe(scaling
+                ));
+            }
         }
     }
-    for (auto [bone_name, bone_index] : src_model->bone_to_index_map) {
-        file.write(reinterpret_cast<char*>(&bone_index), sizeof(uint32_t));
-        file << bone_name << '\n';
-    }
-    uint32_t map_delimiter = -1;
-    file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
-    if (src_model->bone_to_index_map.empty()) {
-        file.close();
-        return;
-    }
-    file.write(
-        reinterpret_cast<char*>(&src_model->global_inverse_transform),
-        sizeof(glm::mat4)
-    );
-    uint32_t skeleton_vector_size = src_model->skeleton.bone_graph.size();
-    if (src_model->skeleton.bone_data.size() != skeleton_vector_size) {
-        std::cerr
-            << "ERROR: Bone Graph Size and Bone Data Size is mismatched\n";
-        file.close();
-        return;
-    }
-    file.write(
-        reinterpret_cast<char*>(&skeleton_vector_size), sizeof(uint32_t)
-    );
-    for (uint32_t i = 0; i < skeleton_vector_size; ++i) {
-        file.write(
-            reinterpret_cast<char*>(&src_model->skeleton.bone_graph[i]),
-            sizeof(BoneNode) - offsetof(BoneNode, children_index)
-        );
-        file.write(
-            reinterpret_cast<char*>(
-                src_model->skeleton.bone_graph[i].children_index.data()
-            ),
-            sizeof(uint32_t)
-                * src_model->skeleton.bone_graph[i].children_index.size()
-        );
-        file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
-    }
-    file.write(
-        reinterpret_cast<char*>(src_model->skeleton.bone_graph.data()),
-        sizeof(BoneNode) * skeleton_vector_size
-    );
-    file.write(
-        reinterpret_cast<char*>(src_model->skeleton.bone_data.data()),
-        sizeof(BoneData) * skeleton_vector_size
-    );
-    file.close();
 }
 
 bool loadModel(const std::string& source, Model* result_model) {
     Assimp::Importer import;
+    import.SetPropertyBool(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, false);
     const aiScene* scene =
         import.ReadFile(source, aiProcess_Triangulate | aiProcess_FlipUVs);
 
@@ -376,108 +356,11 @@ bool loadModel(const std::string& source, Model* result_model) {
         0, result_model->directory.find_last_of('/')
     );
     processNode(result_model, scene->mRootNode, scene, result_model->directory);
-    result_model->skeleton.bone_data.resize(
-        result_model->bone_to_index_map.size()
-    );
     result_model->global_inverse_transform =
         glm::inverse(aiMat4ToMat4(scene->mRootNode->mTransformation));
     processAnimationNode(result_model, scene->mRootNode, scene);
+    processAnimations(result_model, scene);
     return true;
-}
-
-void loadModelTester(const std::string& source, Model* result_model) {
-    std::ifstream file(source, std::ios::binary);
-    result_model->source = source;
-    result_model->directory = source.substr(0, source.find_last_of('/'));
-    ModelFileHeader header;
-    // Version 1: Initial Version, only meshes
-    // Version 2: Add 64 byte header, add skeleton support
-    file.read(reinterpret_cast<char*>(&header), sizeof(ModelFileHeader));
-    int size{0};
-    file.read((char*)&size, sizeof(int));
-    if (!size) {
-        result_model->directory = ' ';
-        return;
-    }
-    std::unique_ptr<int[]> mesh_sizes = std::make_unique<int[]>(size);
-    file.read((char*)mesh_sizes.get(), (sizeof(int) * size));
-    result_model->meshes.reserve(size / 3);
-    for (int i = 0; i < size; i = i + 3) {
-        result_model->meshes.emplace_back(Mesh());
-        Mesh& mesh = result_model->meshes.back();
-
-        mesh.vertices.resize(mesh_sizes[i]);
-        file.read((char*)mesh.vertices.data(), sizeof(Vertex) * mesh_sizes[i]);
-        mesh.indices.resize(mesh_sizes[i + 1]);
-        file.read(
-            (char*)mesh.indices.data(), sizeof(unsigned int) * mesh_sizes[i + 1]
-        );
-
-        mesh.textures.reserve(mesh_sizes[i + 2]);
-        for (int j = 0; j < mesh_sizes[i + 2]; ++j) {
-            mesh.textures.emplace_back(Texture());
-            Texture& texture = mesh.textures.back();
-            // Texture texture;
-            file.read((char*)&texture.id, sizeof(int));
-            file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            file >> texture.type;
-            file >> texture.path;
-            file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        }
-    }
-    while (true) {
-        if (!file.good() || file.eof()) {
-            std::cerr << "ERROR: Reading skeleton map failed\n";
-            break;
-        }
-        std::string key;
-        uint32_t value;
-        file.read(reinterpret_cast<char*>(&value), sizeof(uint32_t));
-        if (value == static_cast<uint32_t>(-1)) {
-            file.close();
-            return;
-        }
-        file >> key;
-        file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        result_model->bone_to_index_map.emplace(std::move(key), value);
-    }
-    if (!file.good() || file.eof()) {
-        file.close();
-        return;
-    }
-    file.read(
-        reinterpret_cast<char*>(&result_model->global_inverse_transform),
-        sizeof(glm::mat4)
-    );
-    uint32_t skeleton_vector_size = 0;
-    file.read(reinterpret_cast<char*>(&skeleton_vector_size), sizeof(uint32_t));
-    result_model->skeleton.bone_graph.resize(skeleton_vector_size);
-    for (uint32_t i = 0; i < skeleton_vector_size; ++i) {
-        file.read(
-            reinterpret_cast<char*>(&result_model->skeleton.bone_graph[i]),
-            sizeof(BoneNode) - offsetof(BoneNode, children_index)
-        );
-        while (true) {
-            uint32_t child_index = -1;
-            file.read(reinterpret_cast<char*>(&child_index), sizeof(uint32_t));
-            if (child_index == -1) {
-                break;
-            }
-            result_model->skeleton.bone_graph[i].children_index.emplace_back(
-                child_index
-            );
-        }
-    }
-    file.read(
-        reinterpret_cast<char*>(result_model->skeleton.bone_graph.data()),
-        sizeof(BoneNode) * skeleton_vector_size
-    );
-    result_model->skeleton.bone_data.resize(skeleton_vector_size);
-    file.read(
-        reinterpret_cast<char*>(result_model->skeleton.bone_data.data()),
-        sizeof(BoneData) * skeleton_vector_size
-    );
-    file.close();
 }
 
 bool compareSavedModel(Model* original_model, Model* test_model) {
@@ -597,15 +480,99 @@ bool compareSavedModel(Model* original_model, Model* test_model) {
                 "Model %s does not have value for key %s in bone map\nValue of "
                 "%s in original model is %" PRIu32 "\n",
                 original_model->directory.c_str(), key.c_str(), key.c_str(),
-                value
+                value.data_index
             );
             success = false;
         }
-        uint32_t test_value = test_model->bone_to_index_map[key];
-        if (value != test_value) {
+        uint32_t test_value = test_model->bone_to_index_map[key].data_index;
+        if (value.data_index != test_value) {
             printf(
-                "Bone \"%s\": %" PRIu32 " != %" PRIu32 "\n", key.c_str(), value,
-                test_value
+                "Bone \"%s\": %" PRIu32 " != %" PRIu32 "\n", key.c_str(),
+                value.data_index, test_value
+            );
+            success = false;
+        }
+    }
+    if (test_model->skeleton.bone_graph.size()
+        != original_model->skeleton.bone_graph.size()) {
+
+        printf(
+            "Model %s does not match bone graph size from original\n%zu bone "
+            "nodes vs. "
+            "%zu "
+            "bone nodes\n",
+            original_model->directory.c_str(),
+            original_model->skeleton.bone_graph.size(),
+            test_model->skeleton.bone_graph.size()
+        );
+        return false;
+    }
+    if (test_model->skeleton.bone_data.size()
+        != original_model->skeleton.bone_data.size()) {
+
+        printf(
+            "Model %s does not match bone data size from original\n%zu bone "
+            "data vs. "
+            "%zu "
+            "bone data\n",
+            original_model->directory.c_str(),
+            original_model->skeleton.bone_data.size(),
+            test_model->skeleton.bone_data.size()
+        );
+        return false;
+    }
+    for (int i = 0; i < original_model->skeleton.bone_data.size(); ++i) {
+        BoneData& original_bone_data = original_model->skeleton.bone_data[i];
+        BoneData& test_bone_data = test_model->skeleton.bone_data[i];
+        if (memcmp(&original_bone_data, &test_bone_data, sizeof(BoneData))
+            != 0) {
+            printf(
+                "Model %s bone data index %d does not match each other\n",
+                original_model->directory.c_str(), i
+            );
+            success = false;
+        }
+    }
+    for (int i = 0; i < original_model->skeleton.bone_graph.size(); ++i) {
+        BoneNode& original_bone_node = original_model->skeleton.bone_graph[i];
+        BoneNode& test_bone_node = test_model->skeleton.bone_graph[i];
+        if (memcmp(
+                &original_bone_node, &test_bone_node,
+                offsetof(BoneNode, children_index)
+            )
+            != 0) {
+            printf(
+                "model %s bone graph index %d does not match each other\n",
+                original_model->directory.c_str(), i
+            );
+            success = false;
+        }
+        if (original_bone_node.children_index.size()
+            != test_bone_node.children_index.size()) {
+
+            printf(
+                "Model %s children list in bone graph mismatch for index %d, "
+                "size from original\n%zu "
+                "children "
+                "size vs. "
+                "%zu "
+                "children size\n",
+                original_model->directory.c_str(), i,
+                original_bone_node.children_index.size(),
+                test_bone_node.children_index.size()
+            );
+            return false;
+        }
+        if (memcmp(
+                original_bone_node.children_index.data(),
+                test_bone_node.children_index.data(),
+                sizeof(uint32_t) * original_bone_node.children_index.size()
+            )
+            != 0) {
+            printf(
+                "Model %s bone graph index %d children list does not match "
+                "each other\n",
+                original_model->directory.c_str(), i
             );
             success = false;
         }

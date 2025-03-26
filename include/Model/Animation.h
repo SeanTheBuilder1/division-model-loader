@@ -23,7 +23,6 @@ struct BoneIntermediate {
 
 struct BoneData {
     glm::mat4 bone_offset_transform = glm::mat4(1.0f);
-    glm::mat4 final_transform = glm::mat4(1.0f);
 };
 
 struct Skeleton {
@@ -35,20 +34,41 @@ struct Skeleton {
     std::vector<BoneIntermediate> bone_intermediate_representation;
 };
 
-struct AnimationKeyframeData {
-    glm::vec3 position;
-    glm::quat rotation;
-    glm::vec3 scale;
+struct BoneIndex {
+    uint32_t data_index = -1;
+    uint32_t graph_index = -1;
 };
 
-struct AnimationKeyframe {
-    std::vector<AnimationKeyframe> bone_keyfame;
+bool operator==(const BoneIndex& bone, const BoneIndex& other);
+
+struct Vec3Keyframe {
+    glm::vec3 vector;
+    double keyframe_tick;
 };
+
+struct QuatKeyframe {
+    glm::quat quat;
+    double keyframe_tick;
+};
+
+struct AnimationChannel {
+    BoneIndex bone_index;
+    std::vector<Vec3Keyframe> position;
+    std::vector<QuatKeyframe> rotation;
+    std::vector<Vec3Keyframe> scale;
+};
+
+// struct AnimationChannelIntermediate {
+//     std::vector<Vec3Keyframe> position;
+//     std::vector<QuatKeyframe> rotation;
+//     std::vector<Vec3Keyframe> scale;
+// };
 
 struct Animation {
-    uint32_t tick_rate;
-    float duration_seconds;
-    std::vector<AnimationKeyframe> keyframes;
+    std::string name;
+    double tick_rate_hz;
+    double duration_ticks;
+    std::vector<AnimationChannel> channels;
 };
 
 struct AnimationIntermediate {
