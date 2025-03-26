@@ -14,24 +14,13 @@ struct BoneNode {
     std::vector<uint32_t> children_index;
 };
 
-struct BoneIntermediate {
-    std::vector<uint32_t> children_index;
-    uint32_t parent_index = -1;
-    glm::mat4 bone_offset = glm::mat4(1.0f);
-    std::string bone_name;
-};
-
 struct BoneData {
     glm::mat4 bone_offset_transform = glm::mat4(1.0f);
 };
 
 struct Skeleton {
-    // Actual in production
     std::vector<BoneNode> bone_graph;
     std::vector<BoneData> bone_data;
-
-    // Like Intermediate Representation
-    std::vector<BoneIntermediate> bone_intermediate_representation;
 };
 
 struct BoneIndex {
@@ -58,22 +47,9 @@ struct AnimationChannel {
     std::vector<Vec3Keyframe> scale;
 };
 
-// struct AnimationChannelIntermediate {
-//     std::vector<Vec3Keyframe> position;
-//     std::vector<QuatKeyframe> rotation;
-//     std::vector<Vec3Keyframe> scale;
-// };
-
 struct Animation {
     std::string name;
     double tick_rate_hz;
     double duration_ticks;
     std::vector<AnimationChannel> channels;
 };
-
-struct AnimationIntermediate {
-    uint32_t tickrate;
-    float duration_seconds;
-};
-
-void importAnimation();
