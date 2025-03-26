@@ -285,6 +285,19 @@ void processAnimationNode(
     }
 }
 
+Vec3Keyframe aiVectorKeyToKeyframe(const aiVectorKey& key) {
+    return {
+        .vector = {key.mValue.x, key.mValue.y, key.mValue.z},
+        .keyframe_tick = key.mTime
+    };
+}
+
+QuatKeyframe aiQuatKeyToKeyframe(const aiQuatKey& key) {
+    return {
+        .quat = {key.mValue.w, key.mValue.x, key.mValue.y, key.mValue.z},
+        .keyframe_tick = key.mTime
+    };
+}
 
 void processAnimations(Model* model, const aiScene* scene) {
     std::span<aiAnimation*> animations_span(
