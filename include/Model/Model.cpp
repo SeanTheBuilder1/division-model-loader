@@ -1,4 +1,5 @@
 #include <Model/Model.h>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
@@ -103,7 +104,13 @@ void saveAnimation(std::fstream& file, Model* src_model) {
 void loadModelTester(const std::string& source, Model* result_model) {
     std::ifstream file(source, std::ios::binary);
     result_model->source = source;
-    result_model->directory = source.substr(0, source.find_last_of('/'));
+    std::filesystem::path directory(
+        result_model->source, std::filesystem::path::format::generic_format
+    );
+    result_model->directory = directory.generic_string();
+    result_model->directory = result_model->directory.substr(
+        0, result_model->directory.find_last_of('/')
+    );
     ModelFileHeader header;
     // Version 1: Initial Version, only meshes
     // Version 2: Add 64 byte header, add skeleton support
