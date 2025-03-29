@@ -307,6 +307,8 @@ void processAnimations(Model* model, const aiScene* scene) {
         Animation& current_animation =
             model->registered_animations.emplace_back();
         current_animation.name = animation->mName.C_Str();
+        current_animation.duration_ticks = animation->mDuration;
+        current_animation.tick_rate_hz = animation->mTicksPerSecond;
         std::span<aiNodeAnim*> channel_span(
             animation->mChannels, animation->mNumChannels
         );
