@@ -1,7 +1,0 @@
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/assimp_simpleogl.dir
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/edit_cache.dir
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/rebuild_cache.dir
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/list_install_components.dir
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/install.dir
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/install/local.dir
-C:/Users/seant/Documents/build/assimp-5.3.1/assimp-5.3.1/samples/SimpleOpenGL/CMakeFiles/install/strip.dir
