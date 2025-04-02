@@ -631,5 +631,56 @@ bool compareSavedModel(Model* original_model, Model* test_model) {
             success = false;
         }
     }
+    for (auto [key, value] : original_model->embedded_texture_map) {
+        if (!test_model->embedded_texture_map.contains("/" + key)) {
+            printf(
+                "Model %s does not have value for key %s in embedded texture "
+                "map\nValue of "
+                "%s in original model is width: %" PRIu32 " height: %" PRIu32
+                "\n",
+                original_model->directory.c_str(), key.c_str(), key.c_str(),
+                value.width, value.height
+            );
+            success = false;
+        }
+        EmbeddedTexture& test_value =
+            test_model->embedded_texture_map["/" + key];
+        if (value.width != test_value.width) {
+            printf(
+                "Texture width for \"%s\": %" PRIu32 " != %" PRIu32 "\n",
+                key.c_str(), value.width, test_value.width
+            );
+            success = false;
+        }
+        if (value.height != test_value.height) {
+            printf(
+                "Texture height for \"%s\": %" PRIu32 " != %" PRIu32 "\n",
+                key.c_str(), value.height, test_value.height
+            );
+            success = false;
+        }
+        if (value.texture_buffer.size() != test_value.texture_buffer.size()) {
+            uint32_t value_size = value.texture_buffer.size();
+            uint32_t test_value_size = value.texture_buffer.size();
+            printf(
+                "Texture buffer size for \"%s\": %" PRIu32 " != %" PRIu32 "\n",
+                key.c_str(), value_size, test_value_size
+            );
+            success = false;
+        }
+        else {
+            uint32_t value_size = value.texture_buffer.size();
+            if (memcmp(
+                    value.texture_buffer.data(),
+                    test_value.texture_buffer.data(), sizeof(char) * value_size
+                )
+                != 0) {
+                printf(
+                    "Texture buffer not equal somehow for \"%s\"\n", key.c_str()
+                );
+                success = false;
+            }
+        }
+    }
     return success;
 }
