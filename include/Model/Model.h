@@ -12,6 +12,12 @@ struct ModelFileHeader {
     char vacant[60] = {};
 };
 
+struct EmbeddedTexture {
+    uint32_t width;
+    uint32_t height;
+    std::vector<char> texture_buffer;
+};
+
 class Model {
 public:
     std::vector<Mesh> meshes;
@@ -19,6 +25,7 @@ public:
     std::string directory;
 
     std::unordered_map<std::string, BoneIndex> bone_to_index_map;
+    std::unordered_map<std::string, EmbeddedTexture> embedded_texture_map;
     std::vector<Animation> registered_animations;
     glm::mat4 global_inverse_transform = glm::mat4(1.0f);
     Skeleton skeleton;

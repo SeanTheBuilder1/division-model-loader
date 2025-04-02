@@ -20,7 +20,7 @@ Mesh processMesh(
     Model& model
 );
 std::vector<Texture> loadMaterialTextures(
-    aiMaterial* mat, aiTextureType type, std::string typeName,
-    std::vector<Texture>& textures_loaded
+    aiMaterial* mat, const aiScene* scene, aiTextureType type,
+    std::string typeName, std::vector<Texture>& textures_loaded, Model& model
 );
 bool compareSavedModel(Model* original_model, Model* test_model);

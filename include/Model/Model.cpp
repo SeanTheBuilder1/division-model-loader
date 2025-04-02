@@ -101,6 +101,44 @@ void saveAnimation(std::fstream& file, Model* src_model) {
     }
 }
 
+void loadEmbeddedTextureMap(std::ifstream& file, Model* result_model){
+    while (true) {
+        if (!file.good() || file.eof()) {
+            std::cerr << "ERROR: Reading embedded texture map failed\n";
+            break;
+        }
+        std::string key;
+        EmbeddedTexture tex;
+        file.read(reinterpret_cast<char*>(&tex.width),sizeof(uint32_t));
+        file.read(reinterpret_cast<char*>(&tex.height),sizeof(uint32_t));
+        uint32_t size = -1;
+        file.read(reinterpret_cast<char*>(&size),sizeof(uint32_t));
+        if(tex.height == -1 && tex.width == -1 && size == -1){
+            break;
+        }
+        std::getline(file, key);
+        tex.texture_buffer.resize(size);
+        file.read(tex.texture_buffer.data(), sizeof(char) * size);
+        result_model->embedded_texture_map.emplace(std::move(key), std::move(tex));
+    }
+}
+
+void saveEmbeddedTextureMap(std::fstream& file, Model* src_model){
+    for(auto [path, tex]:src_model->embedded_texture_map){
+        file.write(reinterpret_cast<char*>(&tex.width),sizeof(uint32_t));
+        file.write(reinterpret_cast<char*>(&tex.height),sizeof(uint32_t));
+        uint32_t size = tex.texture_buffer.size();
+        file.write(reinterpret_cast<char*>(&size),sizeof(uint32_t));
+        file << '/' << path << '\n';
+        file.write(tex.texture_buffer.data(), sizeof(char) * size);
+        printf("LOL: %s\n", path.c_str());
+    }
+    uint32_t map_delimiter = -1;
+    file.write(reinterpret_cast<char*>(&map_delimiter),sizeof(uint32_t));
+    file.write(reinterpret_cast<char*>(&map_delimiter),sizeof(uint32_t));
+    file.write(reinterpret_cast<char*>(&map_delimiter),sizeof(uint32_t));
+}
+
 void loadModelTester(const std::string& source, Model* result_model) {
     std::ifstream file(source, std::ios::binary);
     result_model->source = source;
@@ -199,6 +237,13 @@ void loadModelTester(const std::string& source, Model* result_model) {
         sizeof(BoneData) * skeleton_vector_size
     );
     loadAnimationTester(file, result_model);
+    if(header.version >= 3){
+        loadEmbeddedTextureMap(file, result_model);
+        if (!file.good() || file.eof()) {
+            file.close();
+            return;
+        }
+    }
     file.close();
 }
 
@@ -207,7 +252,7 @@ void saveModel(const std::string& destination, Model* src_model) {
     ModelFileHeader header;
     // Version 1: Initial Version, only meshes
     // Version 2: Add 64 byte header, add skeleton support
-    header.version = 2;
+    header.version = 3;
     file.write(reinterpret_cast<char*>(&header), sizeof(ModelFileHeader));
     int size = src_model->meshes.size() * 3;
     std::unique_ptr<int[]> mesh_sizes = std::make_unique<int[]>(size);
@@ -281,6 +326,7 @@ void saveModel(const std::string& destination, Model* src_model) {
         sizeof(BoneData) * skeleton_vector_size
     );
     saveAnimation(file, src_model);
+    saveEmbeddedTextureMap(file, src_model);
 
     file.close();
 }

@@ -42,17 +42,49 @@ getRelativePath(const std::string& directory, const std::string& path) {
 }
 
 std::vector<Texture> loadMaterialTextures(
-    aiMaterial* mat, aiTextureType type, std::string typeName,
-    std::vector<Texture>& textures_loaded, const std::string& directory
+    aiMaterial* mat, const aiScene* scene, aiTextureType type,
+    std::string typeName, std::vector<Texture>& textures_loaded,
+    const std::string& directory, Model& model
 ) {
     std::vector<Texture> textures;
     for (unsigned int i = 0; i < mat->GetTextureCount(type); i++) {
         aiString str;
         mat->GetTexture(type, i, &str);
+        const aiTexture* embedded_tex_ptr =
+            scene->GetEmbeddedTexture(str.C_Str());
+        std::string real_path;
+        if (embedded_tex_ptr) {
+            if (!model.embedded_texture_map.contains(str.C_Str())) {
+                auto& embedded_tex = model.embedded_texture_map[str.C_Str()];
+                embedded_tex.height = embedded_tex_ptr->mHeight;
+                embedded_tex.width = embedded_tex_ptr->mWidth;
+                if (embedded_tex.height == 0) {
+                    size_t tex_size = embedded_tex.width;
+                    embedded_tex.texture_buffer.resize(tex_size);
+                    memcpy(
+                        embedded_tex.texture_buffer.data(),
+                        embedded_tex_ptr->pcData, tex_size
+                    );
+                }
+                else {
+                    size_t tex_size = embedded_tex.width * embedded_tex.height
+                                      * sizeof(aiTexel);
+                    embedded_tex.texture_buffer.resize(tex_size);
+                    memcpy(
+                        embedded_tex.texture_buffer.data(),
+                        embedded_tex_ptr->pcData, tex_size
+                    );
+                }
+            }
+            real_path = str.C_Str();
+        }
+        else {
+            real_path = getRelativePath(directory, str.C_Str());
+        }
+
         // check if texture was loaded before and if so, continue to next
         // iteration: skip loading a new texture
         bool skip = false;
-        std::string real_path = getRelativePath(directory, str.C_Str());
         for (unsigned int j = 0; j < textures_loaded.size(); j++) {
             if (textures_loaded[j].path == real_path) {
                 textures.push_back(textures_loaded[j]);
@@ -192,26 +224,26 @@ Mesh processMesh(
 
     // 1. diffuse maps
     std::vector<Texture> diffuseMaps = loadMaterialTextures(
-        material, aiTextureType_DIFFUSE, "texture_diffuse", textures_loaded,
-        directory
+        material, scene, aiTextureType_DIFFUSE, "texture_diffuse",
+        textures_loaded, directory, model
     );
     textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
     // 2. specular maps
     std::vector<Texture> specularMaps = loadMaterialTextures(
-        material, aiTextureType_SPECULAR, "texture_specular", textures_loaded,
-        directory
+        material, scene, aiTextureType_SPECULAR, "texture_specular",
+        textures_loaded, directory, model
     );
     textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
     // 3. normal maps
     std::vector<Texture> normalMaps = loadMaterialTextures(
-        material, aiTextureType_HEIGHT, "texture_normal", textures_loaded,
-        directory
+        material, scene, aiTextureType_HEIGHT, "texture_normal",
+        textures_loaded, directory, model
     );
     textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
     // 4. height maps
     std::vector<Texture> heightMaps = loadMaterialTextures(
-        material, aiTextureType_SHININESS, "texture_reflection",
-        textures_loaded, directory
+        material, scene, aiTextureType_SHININESS, "texture_reflection",
+        textures_loaded, directory, model
     );
     textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
 
