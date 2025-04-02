@@ -88,9 +88,9 @@ std::vector<Texture> loadMaterialTextures(
         for (unsigned int j = 0; j < textures_loaded.size(); j++) {
             if (textures_loaded[j].path == real_path) {
                 textures.push_back(textures_loaded[j]);
-                skip =
-                    true; // a texture with the same filepath has already been
-                          // loaded, continue to next one. (optimization)
+                skip = true;
+                // a texture with the same filepath has already been
+                // loaded, continue to next one. (optimization)
                 break;
             }
         }
@@ -99,9 +99,9 @@ std::vector<Texture> loadMaterialTextures(
             texture.type = typeName;
             texture.path = real_path;
             textures.push_back(texture);
-            textures_loaded.push_back(texture
-            ); // store it as texture loaded for entire model, to ensure we
-               // won't unnecessary load duplicate textures.
+            textures_loaded.push_back(texture);
+            // store it as texture loaded for entire model, to ensure we
+            // won't unnecessary load duplicate textures.
         }
     }
     return textures;
@@ -171,10 +171,12 @@ Mesh processMesh(
         if (!model.bone_to_index_map.contains(bone_name)) {
             model.bone_to_index_map.emplace(bone_name, bone_size);
             bone_id = bone_size;
-            model.skeleton.bone_data.emplace_back(BoneData{
-                .bone_offset_transform =
-                    aiMat4ToMat4(mesh->mBones[i]->mOffsetMatrix)
-            });
+            model.skeleton.bone_data.emplace_back(
+                BoneData{
+                    .bone_offset_transform =
+                        aiMat4ToMat4(mesh->mBones[i]->mOffsetMatrix)
+                }
+            );
             bone_size = model.bone_to_index_map.size();
         }
         else {
@@ -278,12 +280,14 @@ void processAnimationNode(
     if (model->bone_to_index_map.contains(node_name)) {
         uint32_t bone_data_index =
             model->bone_to_index_map[node_name].data_index;
-        model->skeleton.bone_graph.emplace_back(BoneNode{
-            .parent_index = parent_index,
-            .bone_data_index = bone_data_index,
-            .bone_node_transform = node_transform,
-            .children_index = {}
-        });
+        model->skeleton.bone_graph.emplace_back(
+            BoneNode{
+                .parent_index = parent_index,
+                .bone_data_index = bone_data_index,
+                .bone_node_transform = node_transform,
+                .children_index = {}
+            }
+        );
         current_index = model->skeleton.bone_graph.size() - 1;
         if (parent_index != -1) {
             model->skeleton.bone_graph[parent_index]
@@ -291,12 +295,14 @@ void processAnimationNode(
         }
     }
     else {
-        model->skeleton.bone_graph.emplace_back(BoneNode{
-            .parent_index = parent_index,
-            .bone_data_index = static_cast<uint32_t>(-1),
-            .bone_node_transform = node_transform,
-            .children_index = {}
-        });
+        model->skeleton.bone_graph.emplace_back(
+            BoneNode{
+                .parent_index = parent_index,
+                .bone_data_index = static_cast<uint32_t>(-1),
+                .bone_node_transform = node_transform,
+                .children_index = {}
+            }
+        );
         current_index = model->skeleton.bone_graph.size() - 1;
         model->bone_to_index_map.emplace(
             node_name,
@@ -374,8 +380,9 @@ void processAnimations(Model* model, const aiScene* scene) {
                 channel->mScalingKeys, channel->mNumScalingKeys
             );
             for (auto& scaling : scaling_key_span) {
-                current_channel.scale.emplace_back(aiVectorKeyToKeyframe(scaling
-                ));
+                current_channel.scale.emplace_back(
+                    aiVectorKeyToKeyframe(scaling)
+                );
             }
         }
     }
