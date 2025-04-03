@@ -101,7 +101,7 @@ void saveAnimation(std::fstream& file, Model* src_model) {
     }
 }
 
-void loadEmbeddedTextureMap(std::ifstream& file, Model* result_model){
+void loadEmbeddedTextureMap(std::ifstream& file, Model* result_model) {
     while (true) {
         if (!file.good() || file.eof()) {
             std::cerr << "ERROR: Reading embedded texture map failed\n";
@@ -109,34 +109,38 @@ void loadEmbeddedTextureMap(std::ifstream& file, Model* result_model){
         }
         std::string key;
         EmbeddedTexture tex;
-        file.read(reinterpret_cast<char*>(&tex.width),sizeof(uint32_t));
-        file.read(reinterpret_cast<char*>(&tex.height),sizeof(uint32_t));
-        uint32_t size = -1;
-        file.read(reinterpret_cast<char*>(&size),sizeof(uint32_t));
-        if(tex.height == -1 && tex.width == -1 && size == -1){
+        file.read(reinterpret_cast<char*>(&tex.width), sizeof(uint32_t));
+        file.read(reinterpret_cast<char*>(&tex.height), sizeof(uint32_t));
+        uint32_t size = UINT32_MAX;
+        file.read(reinterpret_cast<char*>(&size), sizeof(uint32_t));
+        if (tex.height == UINT32_MAX && tex.width == UINT32_MAX
+            && size == UINT32_MAX) {
             break;
         }
         std::getline(file, key);
         tex.texture_buffer.resize(size);
         file.read(tex.texture_buffer.data(), sizeof(char) * size);
-        result_model->embedded_texture_map.emplace(std::move(key), std::move(tex));
+        result_model->embedded_texture_map.emplace(
+            std::move(key), std::move(tex)
+        );
     }
 }
 
-void saveEmbeddedTextureMap(std::fstream& file, Model* src_model){
-    for(auto [path, tex]:src_model->embedded_texture_map){
-        file.write(reinterpret_cast<char*>(&tex.width),sizeof(uint32_t));
-        file.write(reinterpret_cast<char*>(&tex.height),sizeof(uint32_t));
+void saveEmbeddedTextureMap(std::fstream& file, Model* src_model) {
+    for (auto [path, tex] : src_model->embedded_texture_map) {
+        file.write(reinterpret_cast<char*>(&tex.width), sizeof(uint32_t));
+        file.write(reinterpret_cast<char*>(&tex.height), sizeof(uint32_t));
         uint32_t size = tex.texture_buffer.size();
-        file.write(reinterpret_cast<char*>(&size),sizeof(uint32_t));
+        file.write(reinterpret_cast<char*>(&size), sizeof(uint32_t));
         file << '/' << path << '\n';
         file.write(tex.texture_buffer.data(), sizeof(char) * size);
-        printf("LOL: %s\n", path.c_str());
+        // printf("LOL: %s\n%u,%u,%u", path.c_str(), tex.width, tex.height,
+        // size);
     }
-    uint32_t map_delimiter = -1;
-    file.write(reinterpret_cast<char*>(&map_delimiter),sizeof(uint32_t));
-    file.write(reinterpret_cast<char*>(&map_delimiter),sizeof(uint32_t));
-    file.write(reinterpret_cast<char*>(&map_delimiter),sizeof(uint32_t));
+    uint32_t map_delimiter = UINT32_MAX;
+    file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
+    file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
+    file.write(reinterpret_cast<char*>(&map_delimiter), sizeof(uint32_t));
 }
 
 void loadModelTester(const std::string& source, Model* result_model) {
@@ -192,8 +196,7 @@ void loadModelTester(const std::string& source, Model* result_model) {
         std::string key;
         BoneIndex value;
         file.read(reinterpret_cast<char*>(&value), sizeof(BoneIndex));
-        if (value.data_index == static_cast<uint32_t>(-1)
-            && value.graph_index == static_cast<uint32_t>(-1)) {
+        if (value.data_index == UINT32_MAX && value.graph_index == UINT32_MAX) {
             break;
         }
         std::getline(file, key);
@@ -220,9 +223,9 @@ void loadModelTester(const std::string& source, Model* result_model) {
             offsetof(BoneNode, children_index)
         );
         while (true) {
-            uint32_t child_index = -1;
+            uint32_t child_index = UINT32_MAX;
             file.read(reinterpret_cast<char*>(&child_index), sizeof(uint32_t));
-            if (child_index == -1) {
+            if (child_index == UINT32_MAX) {
                 break;
             }
             result_model->skeleton.bone_graph[i].children_index.emplace_back(
@@ -237,7 +240,7 @@ void loadModelTester(const std::string& source, Model* result_model) {
         sizeof(BoneData) * skeleton_vector_size
     );
     loadAnimationTester(file, result_model);
-    if(header.version >= 3){
+    if (header.version >= 3) {
         loadEmbeddedTextureMap(file, result_model);
         if (!file.good() || file.eof()) {
             file.close();
@@ -283,10 +286,9 @@ void saveModel(const std::string& destination, Model* src_model) {
         file.write(reinterpret_cast<char*>(&bone_index), sizeof(BoneIndex));
         file << bone_name << '\n';
     }
-    uint32_t map_delimiter = -1;
+    uint32_t map_delimiter = UINT32_MAX;
     BoneIndex bone_index_map_delimiter = {
-        .data_index = static_cast<uint32_t>(-1),
-        .graph_index = static_cast<uint32_t>(-1)
+        .data_index = UINT32_MAX, .graph_index = UINT32_MAX
     };
     file.write(
         reinterpret_cast<char*>(&bone_index_map_delimiter), sizeof(BoneIndex)
